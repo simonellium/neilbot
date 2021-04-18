@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isSignedInAs(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    function isSignedInAsAdmin() {
+      return request.auth != null && request.auth.uid in [
+        // Replace with UIDs of admin users.
+        "ADMIN1_UID",
+        "ADMIN2_UID"
+      ];
+    }
+
+    // -------- Neil Bot Rules --------- //
+
+    // Event collection.
+    match /DATABASE_PREFIX-events/{eid} {
+      allow list, read: if isSignedIn();
+      allow update, delete, create: if isSignedInAsAdmin();
+      // Performance subcollection world-readable but only editable by admin.
+      match /performances/{userId} {
+        allow list, read: if isSignedIn();
+        allow create, delete: if isSignedInAs(userId) || isSignedInAsAdmin();
+        allow update: if isSignedInAsAdmin();
+      }
+    }
+
+    // Users collection
+    match /DATABASE_PREFIX-users/{userId} {
+      // Profiles are world-readable but only editable by the user.
+      allow list, create, read: if isSignedIn();
+      allow update, delete: if isSignedInAs(userId);
+      // Performance subcollection world-readable but only editable by user.
+      match /performances/{pid} {
+        allow list, read: if isSignedIn();
+        allow create, update, delete: if isSignedInAs(userId) || isSignedInAsAdmin();
+      }
+    }
+    
+  }
+}
