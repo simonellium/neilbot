@@ -1,6 +1,7 @@
 // Neil-Bot cloud functions.
 
-const DATABASE_PREFIX = "neilbot-";
+//!!! INSERT DATABASE PREFIX !!!//
+const DATABASE_PREFIX = "insert-your-database-prefix-";
 
 // Hard coded admin IDs. Keep in sync with firestore rules.
 const ADMIN_UIDS = [
