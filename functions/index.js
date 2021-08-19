@@ -54,6 +54,7 @@ function makeEvent(data) {
 	max_time: data.max_time,
 	min_time: data.min_time,
 	order: data.order,
+	exempt: data.exempt,
     };
 }
 
@@ -303,43 +304,50 @@ async function schedulePerformanceInternal(uid, pid, eid, isAdmin) {
 	}
 
 	// 4) Ensure the user hasn't scheduled more than MAX_YEARLY_PERFORMANCES
-	// performances a year.
-	// Look up all the user's past and scheduled performances to collect the
-	// events they are scheduled at.
-	let allPerformances = await performancesRef.where('uid', '==', uid)
-	    .where("eid", "!=" , "")
-	    .orderBy("eid", "asc")
-	    .get()
-	    .catch((error) => {
-		throw new functions.https.HttpsError(
-		    'internal', ' list user performances failed with: ' + error); 
-	    });
-	var eventRefArr = [];
-	var lastEid = ""; // For de-duping.
-	for (const p of allPerformances.docs) {
-	    if (p.data().eid == lastEid) continue;
-	    lastEid = p.data().eid;
-	    eventRefArr.push(eventsRef.doc(p.data().eid));
-	}
-	// Look up all those events to collect the dates they are at.
-	let performedEvents = eventRefArr.length == 0 ? [] :
-	    await db.getAll(...eventRefArr).catch((error) => {
-		throw new functions.https.HttpsError(
-		    'internal',
-		    ' lookup user-performed event failed with: ' + error); 
-	    });
-	var performanceDates = performedEvents.map((e) => { return e.data().date; });
-	// Sort the dates.
-	performanceDates.sort();
-	// For every sucessive MAX_YEARLY_PERFORMANCES dates, check whether
-	// adding the current event's date will exceed performances limits in a
-	// year.
-	for (var i = 0; i+MAX_YEARLY_PERFORMANCES <= performanceDates.length;
-	     ++i) {
-	    var a = performanceDates.slice(i, i+MAX_YEARLY_PERFORMANCES);
-	    a.push(event.date);
-	    if (withinAYear(a)) {
-		return { error: "You will have scheduled too many performances within a year on these dates: " + a.map((d) => { return formatDate(d); }).join() };
+	// non-exempt performances a year.
+	if (!event.exempt) {
+	    // Look up all the user's past and scheduled performances to collect
+	    // the non-exempt events they are scheduled at.
+	    let allPerformances = await performancesRef.where('uid', '==', uid)
+		.where("eid", "!=" , "")
+		.orderBy("eid", "asc")
+		.get()
+		.catch((error) => {
+		    throw new functions.https.HttpsError(
+			'internal',
+			' list user performances failed with: ' + error); 
+		});
+	    var eventRefArr = [];
+	    var lastEid = ""; // For de-duping.
+	    for (const p of allPerformances.docs) {
+		if (p.data().eid == lastEid) continue;
+		lastEid = p.data().eid;
+		eventRefArr.push(eventsRef.doc(p.data().eid));
+	    }
+	    // Look up all those events to filter out exempt events, and then
+	    // collect the dates the non-exempt ones are at.
+	    let performedEvents = eventRefArr.length == 0 ? [] :
+		await db.getAll(...eventRefArr).catch((error) => {
+		    throw new functions.https.HttpsError(
+			'internal',
+			' lookup user-performed event failed with: ' + error); 
+		});
+	    var performanceDates = performedEvents
+		.filter((e) => { return !e.data().exempt; })
+		.map((e) => { return e.data().date; });
+	    // Sort the dates.
+	    performanceDates.sort();
+	    // For every sucessive MAX_YEARLY_PERFORMANCES dates, check whether
+	    // adding the current event's date will exceed performances limits
+	    // in a year.
+	    for (var i = 0;
+		 i+MAX_YEARLY_PERFORMANCES <= performanceDates.length;
+		 ++i) {
+		var a = performanceDates.slice(i, i+MAX_YEARLY_PERFORMANCES);
+		a.push(event.date);
+		if (withinAYear(a)) {
+		    return { error: "You will have scheduled too many performances within a year on these dates: " + a.map((d) => { return formatDate(d); }).join() };
+		}
 	    }
 	}
     }
