@@ -20,6 +20,11 @@ function escape(text) {
     return escaped;
 }
 
+// Create a banner for event.
+function eventBanner(event) {
+    return escape(event.title) + " " + formatDate(event.date) + ": " + escape(event.time) + ", " + escape(event.venue);
+}
+
 // Adds a spinner overlay to an element.
 function addSpinner(id) {
     var spinner =
@@ -170,7 +175,7 @@ function renderLineup(events, performances, users, loggedInUid,
 	    "  <div class='class-header' id='" + headingId + "'>" +
 	    "  <h2 class='mb-0'>" +
 	    "    <button class='btn btn-outline-" + lineupClass + " btn-block text-center' type='button' data-toggle='collapse' data-target='#" + collapseId + "' aria-expanded='true' aria-controls='" + collapseId + "' id='" + buttonId + "'>" +
-	    "      " + escape(event.title) + " " + formatDate(event.date) + 
+	    "      " + eventBanner(event) + 
 	    "    </button>" +
 	    "  </h2>" +
 	    "  </div> <!-- card header -->" +
@@ -189,15 +194,18 @@ function renderLineup(events, performances, users, loggedInUid,
 	    "<div>Date: <span class='font-weight-bold'>" + formatDate(event.date) + "</span></div>" +
 	    "<div>Time: <span class='font-weight-bold'>" + escape(event.time)  + "</span></div>" +
 	    "<div>Venue: <span class='font-weight-bold'>" + escape(event.venue) + "</span></div>" +
-	    "<small class='form-text text-muted'>Remaining time: " + event.remaining_time + " minutes.</small> <p></p>";
+	    "<small class='form-text text-muted'>Remaining time: " + event.remaining_time + " minutes.</small> " +
+	    (event.exempt ? "<small class='form-text text-muted'>Performances scheduled at this event do not count toward your maximum yearly performance limit.</small> " : "") +
+	    "<p></p>";
 	var lineup = "";
 	
 	event.lineup.forEach(function(performance) {
 	    var pieces = renderPieces(performance);
 	    var performers = renderPerformers(performance);
-	    var duration = performance.pieces
-		.map((p) => p.duration)
-		.reduce((a, c) => a + c)
+	    var duration = 0;
+	    performance.pieces.forEach(function (p)  {
+		duration += p.duration;
+	    });
 	    var canUnschedule = false;
 	    if (users) {
 		// admin page passes users in.
@@ -218,14 +226,14 @@ function renderLineup(events, performances, users, loggedInUid,
 
 	// Scheduling dropdown and preview area.
 	$content_div.append('<hr>');
-	select = "<div class='dropdown'><button class='btn btn-primary dropdown-toggle' type='button' id='" + dropdownId(eid) + "' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>Select a performance</button>";
+	select = "<div class='dropdown'><button class='btn btn-outline-primary dropdown-toggle' type='button' id='" + dropdownId(eid) + "' data-toggle='dropdown' aria-haspopup='true' aria-expanded='false'>Select a performance</button>";
 	select += "<div class='dropdown-menu' aria-labelledby='" + dropdownId(eid) + "'>";
 	for (var pid in unscheduled) {
 	    select += "<a class='dropdown-item performance-dropdown-item' id='" + scheduleId(pid, eid, unscheduled[pid].uid) + "'>" + performanceTitle(unscheduled[pid]) + "</a>";
 	}
 	select += "</div>";
 	select += "</div>";
-	select += "<div id='" + previewId(eid) + "'></div>";
+	select += "<div id='" + previewId(eid) + "' style='margin-top:10px'></div>";
 	$content_div.append(select);
 
 	// Mailing list.
@@ -261,15 +269,23 @@ function renderLineup(events, performances, users, loggedInUid,
 	let[pid, eid, uid] = parseScheduleId($(this).attr('id'));
 	$preview_div = $('#' + previewId(eid));
 	var performance = unscheduled[pid];
-	var pieces = renderPieces(performance);
-	var performers = renderPerformers(performance);
-	var duration = performance.pieces
-	    .map((p) => p.duration)
-	    .reduce((a, c) => a + c)
-	var preview = "" +
-	    " <span class='font-weight-bold' data-toggle='tooltip' data-placement='top' title='" + duration + " mins'>" + pieces + "</span>" +
-	    " <span class='font-weight-normal'> - " + performers + "</span>" +
-	    " <small class='text-muted'><input type='button' class='btn btn-sm btn-circle btn-danger" + " schedule-button' value='' id='" + confirmScheduleId(pid, eid, uid) + "'>Schedule</small>";
+	var preview = "";
+	if (performance.pieces.length == 0) {
+	    preview += "Add one or more pieces to this performance before it can be scheduled.";
+	} else if (performance.performers.length == 0) {
+	    preview += "Add one or more performers to this performance before it can be scheduled.";
+	} else {
+	    var pieces = renderPieces(performance);
+	    var performers = renderPerformers(performance);
+	    var duration = 0;
+	    performance.pieces.forEach(function (p)  {
+		duration += p.duration;
+	    });
+	    preview +=
+		" <span class='font-weight-bold' data-toggle='tooltip' data-placement='top' title='" + duration + " mins'>" + pieces + "</span>" +
+		" <span class='font-weight-normal'> - " + performers + "</span>" +
+		" <button class='btn btn-circle btn-danger" + " schedule-button' value='' id='" + confirmScheduleId(pid, eid, uid) + "'>Schedule</button>";
+	}
 	$preview_div.empty();
 	$preview_div.append(preview);
     });

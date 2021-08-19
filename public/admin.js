@@ -5,7 +5,7 @@ var facebook_auth_provider = new firebase.auth.FacebookAuthProvider();
 // Add Apple???
 
 // functions
-//firebase.functions().useEmulator("localhost", 5001);
+//firebase.functions().useEmulator("localhost", 5001);//@@@
 var addEventFn = firebase.functions().httpsCallable('addEvent');
 var listEventFn = firebase.functions().httpsCallable('listEvent');
 var setEventFn = firebase.functions().httpsCallable('setEvent');
@@ -34,6 +34,7 @@ function totalDurationId(eid) { return "event-total-duration-" + eid; }
 function maxDurationId(eid) { return "event-max-duration-" + eid; }
 function minDurationId(eid) { return "event-min-duration-" + eid; }
 function lockedId(eid) { return "event-locked-button-" + eid; }
+function exemptId(eid) { return "event-exempt-button-" + eid; }
 function editId(eid) { return "event-edit-button-" + eid; }
 function saveId(eid) { return "event-save-button-" + eid; }
 function deleteId(eid) { return "event-delete-button-" + eid; }
@@ -48,6 +49,7 @@ function editEvent(eid) {
     $('#' + maxDurationId(eid)).prop('disabled', false);
     $('#' + minDurationId(eid)).prop('disabled', false);
     $('#' + lockedId(eid)).prop('disabled', false);
+    $('#' + exemptId(eid)).prop('disabled', false);
     $('#' + saveId(eid)).show();
     $('#' + deleteId(eid)).show();
     $('#' + editId(eid)).hide();
@@ -75,6 +77,7 @@ function saveEvent(eid) {
 	"max_time": maxtime,
 	"min_time": mintime,
 	"order": $('#' + lockedId(eid)).prop('checked') ? ["dummy"] : [],
+	"exempt": $('#' + exemptId(eid)).prop('checked'),
     }
     console.log('Saving event:', JSON.stringify(event));
     setEventFn(event).then((result) => {
@@ -84,8 +87,7 @@ function saveEvent(eid) {
 	}
 	console.log('Saved event: ', JSON.stringify(result));
 	// Update UI.
-	$("#event-button-" + eid).html(
-	    escape(event.title) + " " + formatDate(event.date) + " " + escape(event.time));
+	$("#event-button-" + eid).html(eventBanner(event));
 	$("#event-button-" + eid).removeClass(['btn-outline-success', 'btn-outline-dark']);
 	$("#event-button-" + eid).addClass(event.order.length > 0 ? 'btn-outline-success' : 'btn-outline-dark');
 	refreshLineup()
@@ -98,6 +100,7 @@ function saveEvent(eid) {
     $('#' + maxDurationId(eid)).prop('disabled', true);
     $('#' + minDurationId(eid)).prop('disabled', true);
     $('#' + lockedId(eid)).prop('disabled', true);
+    $('#' + exemptId(eid)).prop('disabled', true);
     $('#' + saveId(eid)).hide();
     $('#' + deleteId(eid)).hide();
     $('#' + editId(eid)).show();
@@ -157,7 +160,7 @@ function refreshEventList() {
 		"  <div class='class-header' id='" + headingId + "'>" +
 		"  <h2 class='mb-0'>" +
 		"    <button class='btn btn-outline-" + eventClass + " btn-block text-center' type='button' data-toggle='collapse' data-target='#" + collapseId + "' aria-expanded='true' aria-controls='" + collapseId + "' id='" + buttonId + "'>" +
-		"      " + escape(event.title) + " " + formatDate(event.date) + " " + escape(event.time) +
+		"      " + eventBanner(event) +
 		"    </button>" +
 		"  </h2>" +
 		"  </div> <!-- card header -->" +
@@ -202,6 +205,10 @@ function refreshEventList() {
 		"    <label for='" + lockedId(eid) +"' class='col-sm-3 col-form-label'>Locked?</label>" +
 		"    <div class='col-sm-9'><input type='checkbox' class='form-check-input is-disabled' style='margin-left:5px' id='" + lockedId(eid) + "' disabled></input></div>" +
 		"  </div>" +
+		"  <div class='form-group row'>" +
+		"    <label for='" + exemptId(eid) +"' class='col-sm-3 col-form-label'>Exempt?</label>" +
+		"    <div class='col-sm-9'><input type='checkbox' class='form-check-input is-disabled' style='margin-left:5px' id='" + exemptId(eid) + "' disabled></input></div>" +
+		"  </div>" +
 		"</form>"
 		"";
 	    var $content_div = $("#" + contentId);
@@ -216,6 +223,7 @@ function refreshEventList() {
 	    $('#' + maxDurationId(eid)).val(event.max_time);
 	    $('#' + minDurationId(eid)).val(event.min_time);
 	    $('#' + lockedId(eid)).prop('checked', (event.order.length > 0));
+	    $('#' + exemptId(eid)).prop('checked', event.exempt);
 
 	    // Event controls.
 	    var controls =
@@ -308,6 +316,7 @@ function login(auth_provider) {
 		"max_time": 0,
 		"min_time": 0,
 		"order": [],  // initially unlocked.
+		"exempt": false,
 	    }
 	    console.log('Adding event:', JSON.stringify(event));
 	    addEventFn(event).then((result) => {
