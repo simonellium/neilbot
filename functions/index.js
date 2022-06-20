@@ -209,7 +209,15 @@ exports.setPerformance = functions.https.onCall((data, context) => {
 const performanceFetcher = async(uid, events, allPerformances) => {
     var promises = [];
     if (events.length > 0) {
-	promises.push(performancesRef.where("eid", "in", events).get());
+	// Firebase 'in' selector clause takes a max of 10.
+	var slice_size = 10;
+	// So chunk up events array into chunks of 10.
+	var events_sliced = Array(Math.ceil(events.length / slice_size)).fill().map((_,i) =>
+	    events.slice(i * slice_size, i * slice_size + slice_size));
+	// And issue that many where clauses.
+	events_sliced.forEach(function(events_slice) {
+	    promises.push(performancesRef.where("eid", "in", events_slice).get());
+	});
     }
     if (!uid) {
 	promises.push(performancesRef.where("eid", "==", "").get());
