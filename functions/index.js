@@ -1,4 +1,4 @@
-// Neil-Bot cloud functions.
+1// Neil-Bot cloud functions.
 
 //!!! INSERT DATABASE PREFIX !!!//
 const DATABASE_PREFIX = "insert-your-database-prefix-";
@@ -12,6 +12,12 @@ const ADMIN_UIDS = [
 
 // Hard coded maximum yearly performance frequency.
 const MAX_YEARLY_PERFORMANCES = 3;
+
+// Hard coded blacklisted user IDs. They can't schedule performances.
+const BLACKLISTED_IDS = [
+    "BLACKLISTED1_UID",
+    "BLACKLISTED2_UID",
+];
 
 const functions = require('firebase-functions');
 
@@ -42,6 +48,10 @@ function withinAYear(times) {
 
 function isAdmin(uid) {
     return ADMIN_UIDS.includes(uid);
+}
+
+function isBlacklisted(uid) {
+    return BLACKLISTED_UIDS.includes(uid);
 }
 
 function makeEvent(data) {
@@ -264,7 +274,7 @@ exports.deletePerformance = functions.https.onCall((data, context) => {
 });
 
 // Scheduling functions.
-async function schedulePerformanceInternal(uid, pid, eid, isAdmin) {
+async function schedulePerformanceInternal(uid, pid, eid, isAdmin, isBlacklisted) {
     let p =
 	await usersRef.doc(uid).collection('performances').doc(pid)
 	.get().catch((error) => {
@@ -280,6 +290,11 @@ async function schedulePerformanceInternal(uid, pid, eid, isAdmin) {
 
     // Enforce scheudling checks if not superuser.
     if (!isAdmin) {
+	// 0) Check if the user is black listed.
+	if (isBlacklisted) {
+	    return { error: "This user cannot schedule performances." };
+	}
+	
 	// 1) Check if the event is not already finalized.
 	if (event.order.length != 0) {
 	    return { error: "This event lineup is now final; you cannot schedule a performance in it." };
@@ -433,7 +448,8 @@ exports.schedulePerformance = functions.https.onCall((data, context) => {
 	return { error: "Non-admins cannot schedule performance for someone else." };
     }
     return schedulePerformanceInternal(data.uid, data.pid, data.eid,
-				       isAdmin(context.auth.uid));
+				       isAdmin(context.auth.uid),
+				       isBlacklisted(context.auth.uid));
 });
 exports.unschedulePerformance = functions.https.onCall((data, context) => {
     if (context.auth.uid !== data.uid && !isAdmin(context.auth.uid)) {
