@@ -255,7 +255,10 @@ exports.listPerformance = functions.https.onCall((data, context) => {
     var uid = context.auth.uid;
     var allPerformances = false;
     if (data.allUsers !== undefined && data.allUsers) {
-	uid = null;
+        if (!isAdmin(uid)) {
+            return { error: "Non-admins cannot view performances for all users." };
+        }
+        uid = null;
     } else if (data.allPerformances !== undefined && data.allPerformances) {
 	allPerformances = true;
     }
