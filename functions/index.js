@@ -1,4 +1,4 @@
-1// Neil-Bot cloud functions.
+// Neil-Bot cloud functions.
 
 //!!! INSERT DATABASE PREFIX !!!//
 const DATABASE_PREFIX = "insert-your-database-prefix-";
@@ -23,10 +23,12 @@ const functions = require('firebase-functions');
 
 // The Firebase Admin SDK to access Firestore.
 const admin = require('firebase-admin');
+const { getFirestore } = require('firebase-admin/firestore');
+
 admin.initializeApp();
 
 // Dataset Handles
-var db = admin.firestore();
+var db = getFirestore();
 var eventsRef = db.collection(DATABASE_PREFIX + "events");
 var usersRef = db.collection(DATABASE_PREFIX + "users");
 var performancesRef = db.collectionGroup("performances");
@@ -76,9 +78,17 @@ function makePerformance(data, uid) {
     };
 }
 
+
+const { onCall } = require("firebase-functions/v2/https");
+
 // Admin functions
-exports.addEvent = functions.https.onCall((data, context) => {
-    if (!isAdmin(context.auth.uid)) {
+exports.addEvent = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    const uid = request.auth.uid; 
+    const data = request.data; 
+    if (!isAdmin(uid)) {
 	return { error: "Non-admins cannot edit events." };
     }
     var event = makeEvent(data);
@@ -91,8 +101,13 @@ exports.addEvent = functions.https.onCall((data, context) => {
     });
 });
 
-exports.setEvent = functions.https.onCall((data, context) => {
-    if (!isAdmin(context.auth.uid)) {
+exports.setEvent = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    const uid = request.auth.uid; 
+    const data = request.data; 
+    if (!isAdmin(uid)) {
 	return { error: "Non-admins cannot update events." };
     }
     return eventsRef.doc(data.eid).update(makeEvent(data)).then(() => {
@@ -120,8 +135,8 @@ const eventFetcher = async(cutoff) => {
     }
     return events;
 }
-exports.listEvent = functions.https.onCall((data, context) => {
-    return eventFetcher(data.cutoff);
+exports.listEvent = functions.https.onCall((request) => {
+    return eventFetcher(request.data.cutoff);
 });
 
 const eventDeleter = async(eid) => {
@@ -141,16 +156,25 @@ const eventDeleter = async(eid) => {
     });
     return { status: "Success" };
 };
-exports.deleteEvent = functions.https.onCall((data, context) => {
-    if (!isAdmin(context.auth.uid)) {
+exports.deleteEvent = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    const uid = request.auth.uid; 
+    const data = request.data; 
+    if (!isAdmin(uid)) {
 	return { error: "Non-admins cannot delete events." };
     }
     return eventDeleter(data.eid)
 });
 
 // User functions
-exports.setUser = functions.https.onCall((data, context) => {
-    const uid = context.auth.uid;
+exports.setUser = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    const uid = request.auth.uid; 
+    const data = request.data; 
     usersRef.doc(uid).set(data)
 	.then(function() { console.log("Updated user."); })
 	.catch(function(error) {
@@ -165,8 +189,11 @@ const userFetcher = async(uid) => {
     });
     return results.data();
 }
-exports.getUser = functions.https.onCall((data, context) => {
-    return userFetcher(context.auth.uid);
+exports.getUser = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    return userFetcher(request.auth.uid);
 });
 
 const userLister = async() => {
@@ -182,13 +209,17 @@ const userLister = async() => {
     }
     return users;
 }
-exports.listUser = functions.https.onCall((data, context) => {
+exports.listUser = functions.https.onCall((request) => {
     return userLister();
 });
 
-exports.addPerformance = functions.https.onCall((data, context) => {
+exports.addPerformance = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    const uid = request.auth.uid; 
+    const data = request.data; 
     var performance = makePerformance(data);
-    var uid = context.auth.uid;
     performance.uid = uid;
     performance.eid = '';
     return usersRef.doc(uid).collection('performances').add(performance).then((docRef) => {
@@ -200,8 +231,12 @@ exports.addPerformance = functions.https.onCall((data, context) => {
     });
 });
 
-exports.setPerformance = functions.https.onCall((data, context) => {
-    var uid = context.auth.uid;
+exports.setPerformance = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    const uid = request.auth.uid; 
+    const data = request.data; 
     return usersRef.doc(uid).collection('performances').doc(data.pid).update(makePerformance(data)).then(() => {
 	console.log('Updated performance:', data.pid);
 	return { pid : data.pid };
@@ -251,22 +286,30 @@ const performanceFetcher = async(uid, events, allPerformances) => {
     });
     return performances;
 }
-exports.listPerformance = functions.https.onCall((data, context) => {
-    var uid = context.auth.uid;
+exports.listPerformance = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    var uid = request.auth.uid; 
+    const data = request.data; 
     var allPerformances = false;
     if (data.allUsers !== undefined && data.allUsers) {
         if (!isAdmin(uid)) {
             return { error: "Non-admins cannot view performances for all users." };
         }
-        uid = null;
+	uid = null;
     } else if (data.allPerformances !== undefined && data.allPerformances) {
 	allPerformances = true;
     }
     return performanceFetcher(uid, data.events, allPerformances);
 });
 
-exports.deletePerformance = functions.https.onCall((data, context) => {
-    var uid = context.auth.uid;
+exports.deletePerformance = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    const uid = request.auth.uid; 
+    const data = request.data; 
     return usersRef.doc(uid).collection('performances').doc(data.pid).delete().then(() => {
 	console.log('Deleted performance:', data.pid);
 	return { pid : data.pid };
@@ -446,19 +489,27 @@ async function unschedulePerformanceInternal(uid, pid, eid, isAdmin) {
     return { status: "Success" };
 }
 
-exports.schedulePerformance = functions.https.onCall((data, context) => {
-    if (context.auth.uid !== data.uid && !isAdmin(context.auth.uid)) {
+exports.schedulePerformance = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    const uid = request.auth.uid; 
+    const data = request.data; 
+    if (uid !== data.uid && !isAdmin(uid)) {
 	return { error: "Non-admins cannot schedule performance for someone else." };
     }
     return schedulePerformanceInternal(data.uid, data.pid, data.eid,
-				       isAdmin(context.auth.uid),
-				       isBlacklisted(context.auth.uid));
+				       isAdmin(uid), isBlacklisted(uid));
 });
-exports.unschedulePerformance = functions.https.onCall((data, context) => {
-    if (context.auth.uid !== data.uid && !isAdmin(context.auth.uid)) {
+exports.unschedulePerformance = functions.https.onCall((request) => {
+    if (!request.auth) {
+	throw new Error("The function must be called while authenticated.");
+    }
+    const uid = request.auth.uid; 
+    const data = request.data; 
+    if (uid !== data.uid && !isAdmin(uid)) {
 	return { error: "Non-admins cannot unschedule performance for someone else." };
     }
     return unschedulePerformanceInternal(data.uid, data.pid, data.eid,
-					 isAdmin(context.auth.uid));
+					 isAdmin(uid));
 });
-
